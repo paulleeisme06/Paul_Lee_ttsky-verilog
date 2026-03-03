@@ -6,16 +6,14 @@
 `default_nettype none
 
 module tt_um_alif_accelerator (
-    input  wire [7:0] ui_in,    // Input Current
-    output wire [7:0] uo_out,   // [7:1] Vmem, [0] Spike
-    input  wire [7:0] uo_in,    // (Unused)
-    output wire [7:0] uo_out_extra, // (Unused)
-    input  wire [7:0] uio_in,   // [7:4] Adapt Leak, [3:0] Vmem Leak
-    output wire [7:0] uio_out,
-    output wire [7:0] uio_oe,
-    input  wire       ena,      
-    input  wire       clk,      
-    input  wire       rst_n     
+    input  wire [7:0] ui_in,    // Dedicated inputs
+    output wire [7:0] uo_out,   // Dedicated outputs
+    input  wire [7:0] uio_in,   // IOs: Input path
+    output wire [7:0] uio_out,  // IOs: Output path
+    output wire [7:0] uio_oe,   // IOs: Enable path (active high: 0=input, 1=output)
+    input  wire       ena,      // will go high when the design is enabled
+    input  wire       clk,      // clock
+    input  wire       rst_n     // reset_n - low to reset
 );
 
     // Internal Registers
@@ -36,20 +34,20 @@ module tt_um_alif_accelerator (
             // 1. Spike Logic & Threshold Reset
             if (v_mem >= THRESHOLD) begin
                 v_mem <= 8'd0;
-                spike_reg <= 1'b1; // Pulse high for 1 cycle
-                // Increment fatigue (adaptation)
+                spike_reg <= 1'b1; 
                 if (adapt < 8'd230) 
                     adapt <= adapt + ADAPT_STEP;
             end else begin
                 spike_reg <= 1'b0;
                 
                 // 2. Integration: V = V + Input - Leak - Adaptation
+                // We use uio_in[3:0] for Vmem leak and uio_in[7:4] for Adapt leak
                 if (v_mem + ui_in > (uio_in[3:0] + adapt))
                     v_mem <= v_mem + ui_in - uio_in[3:0] - adapt;
                 else
                     v_mem <= 8'd0;
 
-                // 3. Adaptation Decay: Fatigue fades over time
+                // 3. Adaptation Decay
                 if (adapt > uio_in[7:4])
                     adapt <= adapt - uio_in[7:4];
                 else
@@ -59,11 +57,12 @@ module tt_um_alif_accelerator (
     end
 
     // Assign Outputs
-    assign uo_out[0]   = spike_reg;      
-    assign uo_out[7:1] = v_mem[7:1]; 
-    assign uio_out     = adapt; 
-    assign uio_oe      = 8'b0; 
+    assign uo_out[0]   = spike_reg;           // Spike bit
+    assign uo_out[7:1] = v_mem[7:1];          // Vmem monitor
+    assign uio_out     = adapt;               // Show adaptation state on bidir pins
+    assign uio_oe      = 8'hFF;               // Set all UIO pins as outputs to show 'adapt'
 
-    wire _unused = &{uo_in, uo_out_extra, 1'b0};
+    // Use 'ena' to prevent unused warning
+    wire _unused = &{ena, 1'b0};
 
 endmodule
