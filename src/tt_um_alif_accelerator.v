@@ -1,8 +1,3 @@
-/*
- * Copyright (c) 2024 Your Name
- * SPDX-License-Identifier: Apache-2.0
- */
-
 `default_nettype none
 
 module tt_um_alif_accelerator (
@@ -20,8 +15,10 @@ module tt_um_alif_accelerator (
     reg [7:0] adapt;
     reg       spike_reg;
     
-    // Internal wires to simplify the "Front-End" math
-    wire [7:0] total_leak = uio_in[3:0] + adapt;
+    // Explicitly pad the 4-bit inputs to 8-bits to satisfy the linter
+    wire [7:0] v_leak     = {4'b0000, uio_in[3:0]};
+    wire [7:0] adapt_leak = {4'b0000, uio_in[7:4]};
+    wire [7:0] total_leak = v_leak + adapt;
 
     always @(posedge clk) begin
         if (!rst_n) begin
@@ -36,14 +33,15 @@ module tt_um_alif_accelerator (
             end else begin
                 spike_reg <= 1'b0;
                 
-                // Simplified math to prevent FEOL congestion
+                // Integration math
                 if ((v_mem + ui_in) > total_leak)
                     v_mem <= (v_mem + ui_in) - total_leak;
                 else
                     v_mem <= 8'd0;
 
-                if (adapt > uio_in[7:4])
-                    adapt <= adapt - uio_in[7:4];
+                // Adaptation Decay math
+                if (adapt > adapt_leak)
+                    adapt <= adapt - adapt_leak;
                 else
                     adapt <= 8'd0;
             end
